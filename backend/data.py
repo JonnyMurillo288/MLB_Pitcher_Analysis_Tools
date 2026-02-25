@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
-from pybaseball import pitching_stats, playerid_lookup, statcast_pitcher
+from pybaseball import pitching_stats, playerid_lookup, playerid_reverse_lookup, statcast_pitcher
 
 from cache import PITCHER_CACHE, SEASON_CACHE
 
@@ -53,12 +53,29 @@ def load_qualified_pitchers() -> pd.DataFrame:
         .sort_values("Name")
         .reset_index(drop=True)
     )
-    result = qualified[["Name", "Team", "IP", "G", "GS", "gs_pct", "_season"]]
+    result = qualified[["IDfg", "Name", "Team", "IP", "G", "GS", "gs_pct", "_season"]]
     PITCHER_CACHE.set("pitchers", result)
     return result
 
 
 # ── Pitcher ID ────────────────────────────────────────────────────────────────
+
+def resolve_mlbam_id_from_idfg(idfg: int) -> int | None:
+    cache_key = f"id_idfg::{idfg}"
+    cached = PITCHER_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    res = playerid_reverse_lookup([idfg], key_type="fangraphs")
+    if res.empty:
+        return None
+    rows = res[res["mlb_played_last"].notna()]
+    if rows.empty:
+        rows = res
+    pid = int(rows.sort_values("mlb_played_last", ascending=False).iloc[0]["key_mlbam"])
+    PITCHER_CACHE.set(cache_key, pid)
+    return pid
+
 
 def resolve_mlbam_id(full_name: str) -> int | None:
     cache_key = f"id::{full_name}"
@@ -66,6 +83,18 @@ def resolve_mlbam_id(full_name: str) -> int | None:
     if cached is not None:
         return cached
 
+    # Try IDfg-based lookup first (more reliable than name matching)
+    pitchers_df = load_qualified_pitchers()
+    if not pitchers_df.empty and "IDfg" in pitchers_df.columns:
+        match = pitchers_df[pitchers_df["Name"] == full_name]
+        if not match.empty:
+            idfg = int(match.iloc[0]["IDfg"])
+            pid = resolve_mlbam_id_from_idfg(idfg)
+            if pid is not None:
+                PITCHER_CACHE.set(cache_key, pid)
+                return pid
+
+    # Fallback: name-based lookup
     parts = full_name.strip().split()
     if len(parts) < 2:
         return None

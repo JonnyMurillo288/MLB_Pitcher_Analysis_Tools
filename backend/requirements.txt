@@ -5,3 +5,11 @@ pandas
 numpy
 statsmodels
 scipy
+python-dotenv
+supabase
+PyJWT
+stripe
+sendgrid
+apscheduler
+jinja2
+psycopg2-binary

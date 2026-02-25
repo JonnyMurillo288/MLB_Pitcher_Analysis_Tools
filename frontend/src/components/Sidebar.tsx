@@ -7,6 +7,7 @@ import {
   getMetrics,
   getSeasons,
 } from "../api/client";
+import type { SavedPitcher } from "../types";
 
 interface Props {
   pitcherName: string;
@@ -18,6 +19,9 @@ interface Props {
   trendSeason: number;
   selectedPitches: string[];
   selectedMetrics: string[];
+  savedPitchers: SavedPitcher[];
+  isSaved: boolean;
+  isLoggedIn: boolean;
   onPitcherChange: (name: string) => void;
   onDataSeasonChange: (y: number) => void;
   onTargetDateChange: (d: string) => void;
@@ -28,6 +32,8 @@ interface Props {
   onSelectedMetricsChange: (m: string[]) => void;
   onRunAnalysis: () => void;
   canRun: boolean;
+  onSavePitcher: () => void;
+  onRemovePitcher: (name: string) => void;
 }
 
 export default function Sidebar(props: Props) {
@@ -41,6 +47,9 @@ export default function Sidebar(props: Props) {
     trendSeason,
     selectedPitches,
     selectedMetrics,
+    savedPitchers,
+    isSaved,
+    isLoggedIn,
     onPitcherChange,
     onDataSeasonChange,
     onTargetDateChange,
@@ -51,6 +60,8 @@ export default function Sidebar(props: Props) {
     onSelectedMetricsChange,
     onRunAnalysis,
     canRun,
+    onSavePitcher,
+    onRemovePitcher,
   } = props;
 
   const [pitcherFilter, setPitcherFilter] = useState("");
@@ -96,6 +107,12 @@ export default function Sidebar(props: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metrics]);
 
+  // Saved pitcher names as a set for quick lookup
+  const savedNames = useMemo(
+    () => new Set(savedPitchers.map((p) => p.pitcher_name)),
+    [savedPitchers]
+  );
+
   const filteredPitchers = useMemo(() => {
     const q = pitcherFilter.toLowerCase();
     return q ? pitchers.filter((p) => p.name.toLowerCase().includes(q)) : pitchers;
@@ -124,28 +141,110 @@ export default function Sidebar(props: Props) {
         <span className="text-lg font-bold text-gray-100">⚾ Pitcher Analyzer</span>
       </div>
 
-      {/* Pitcher search */}
+      {/* ── Saved Pitchers Bucket (logged-in only) ───────────────────── */}
+      {isLoggedIn && savedPitchers.length > 0 && (
+        <div>
+          <label className="sidebar-label">Watching</label>
+          <div className="flex flex-col gap-0.5">
+            {savedPitchers.map((sp) => (
+              <div
+                key={sp.pitcher_name}
+                className="flex items-center justify-between group"
+              >
+                <button
+                  className={`flex-1 text-left px-2 py-1.5 text-sm rounded truncate transition-colors
+                    ${pitcherName === sp.pitcher_name
+                      ? "bg-brand text-white font-medium"
+                      : "text-gray-300 hover:bg-surface-border"}`}
+                  onClick={() => onPitcherChange(sp.pitcher_name)}
+                >
+                  {sp.pitcher_name}
+                </button>
+                <button
+                  onClick={() => onRemovePitcher(sp.pitcher_name)}
+                  className="ml-1 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100
+                             transition-opacity text-xs px-1"
+                  title="Remove from watching"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-1.5 border-t border-surface-border" />
+        </div>
+      )}
+
+      {/* ── Pitcher search ───────────────────────────────────────────── */}
       <div>
-        <label className="sidebar-label">Pitcher</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="sidebar-label mb-0">Pitcher</label>
+          {loadingPitchers ? (
+            <span className="text-xs text-blue-400 animate-pulse">Loading…</span>
+          ) : (
+            <span className="text-xs text-gray-500">
+              {filteredPitchers.length}/{pitchers.length}
+            </span>
+          )}
+        </div>
         <input
           className="select-base mb-1"
           placeholder="Filter pitchers…"
           value={pitcherFilter}
           onChange={(e) => setPitcherFilter(e.target.value)}
+          disabled={loadingPitchers}
         />
-        <select
-          className="select-base"
-          size={6}
-          value={pitcherName}
-          onChange={(e) => onPitcherChange(e.target.value)}
+        <div
+          className={`border border-surface-border rounded overflow-y-auto h-40 bg-surface-raised ${
+            loadingPitchers ? "flex items-center justify-center" : ""
+          }`}
         >
-          {loadingPitchers && <option disabled>Loading…</option>}
-          {filteredPitchers.map((p) => (
-            <option key={p.name} value={p.name}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+          {loadingPitchers ? (
+            <span className="text-gray-500 text-sm animate-pulse">
+              Fetching pitcher list…
+            </span>
+          ) : filteredPitchers.length === 0 ? (
+            <div className="px-2 py-2 text-gray-500 text-sm">No results</div>
+          ) : (
+            filteredPitchers.map((p) => (
+              <div
+                key={p.name}
+                className={`px-2 py-1.5 text-sm cursor-pointer select-none flex items-center justify-between group ${
+                  p.name === pitcherName
+                    ? "bg-brand text-white font-medium"
+                    : "text-gray-300 hover:bg-surface-border"
+                }`}
+                onClick={() => onPitcherChange(p.name)}
+              >
+                <span className="truncate">{p.name}</span>
+                {isLoggedIn && savedNames.has(p.name) && (
+                  <span className="text-xs text-yellow-400 ml-1 shrink-0" title="In your watch list">★</span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Selected pitcher + save/remove toggle */}
+        {pitcherName && (
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-xs text-gray-400 truncate flex-1">
+              ✓ <span className="text-gray-200">{pitcherName}</span>
+            </p>
+            {isLoggedIn && (
+              <button
+                onClick={isSaved ? () => onRemovePitcher(pitcherName) : onSavePitcher}
+                className={`ml-2 shrink-0 text-xs px-1.5 py-0.5 rounded border transition-colors
+                  ${isSaved
+                    ? "border-yellow-600 text-yellow-400 hover:border-red-500 hover:text-red-400"
+                    : "border-gray-600 text-gray-400 hover:border-blue-500 hover:text-blue-400"}`}
+                title={isSaved ? "Remove from watch list" : "Add to watch list"}
+              >
+                {isSaved ? "★ Watching" : "☆ Watch"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Data season */}

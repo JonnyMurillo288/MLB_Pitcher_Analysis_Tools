@@ -1,0 +1,23 @@
+# SQL files
+*.sql
+
+# YAML files
+*.yml
+*.yaml
+
+# Docker files
+Dockerfile
+Dockerfile.*
+docker-compose.yml
+docker-compose.yaml
+docker-compose*.yml
+docker-compose*.yaml
+.docker/
+
+# Environment files
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+.env.test

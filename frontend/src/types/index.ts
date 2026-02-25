@@ -2,6 +2,7 @@
 
 export interface PitcherOption {
   name: string;
+  idfg: number;
   season: number;
   ip: number;
 }
@@ -195,4 +196,29 @@ export interface OutcomesRequest {
 export interface RegressionFeaturesRequest {
   pitcher_id: number;
   season: number;
+}
+
+// ─── User / Auth ──────────────────────────────────────────────────────────────
+
+export interface SavedPitcher {
+  pitcher_name: string;
+  pitcher_idfg: number | null;
+  added_at: string;
+}
+
+export interface Subscription {
+  user_id: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  status: "active" | "inactive" | "canceled";
+  current_period_end: string | null;
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  notification_email: string | null;
+}
+
+export interface CheckoutSessionResponse {
+  checkout_url: string;
 }

@@ -11,12 +11,24 @@ import type {
   FeaturesResponse,
   RunRegressionRequest,
   RegressionResponse,
+  SavedPitcher,
+  Subscription,
+  NotificationSettings,
+  CheckoutSessionResponse,
 } from "../types";
 
 const BASE = "/api";
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+// Token getter type — a function that returns a Promise<string | null>
+type TokenGetter = () => Promise<string | null>;
+
+async function get<T>(path: string, getToken?: TokenGetter): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (getToken) {
+    const token = await getToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${BASE}${path}`, { headers });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`GET ${path} → ${res.status}: ${text}`);
@@ -24,15 +36,52 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, getToken?: TokenGetter): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (getToken) {
+    const token = await getToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  }
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`POST ${path} → ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+async function put<T>(path: string, body: unknown, getToken?: TokenGetter): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (getToken) {
+    const token = await getToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`PUT ${path} → ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+async function del<T>(path: string, getToken?: TokenGetter): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (getToken) {
+    const token = await getToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE", headers });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`DELETE ${path} → ${res.status}: ${text}`);
   }
   return res.json();
 }
@@ -81,3 +130,44 @@ export const getRegressionFeatures = (
 export const runRegression = (
   req: RunRegressionRequest
 ): Promise<RegressionResponse> => post("/regression/run", req);
+
+// ─── Saved Pitchers ───────────────────────────────────────────────────────────
+
+export const getSavedPitchers = (getToken: TokenGetter): Promise<SavedPitcher[]> =>
+  get<SavedPitcher[]>("/user/saved-pitchers", getToken);
+
+export const savePitcher = (
+  getToken: TokenGetter,
+  pitcher_name: string,
+  pitcher_idfg: number | null
+): Promise<SavedPitcher> =>
+  post("/user/saved-pitchers", { pitcher_name, pitcher_idfg }, getToken);
+
+export const deleteSavedPitcher = (
+  getToken: TokenGetter,
+  pitcher_name: string
+): Promise<{ ok: boolean }> =>
+  del(`/user/saved-pitchers/${encodeURIComponent(pitcher_name)}`, getToken);
+
+// ─── Subscription ─────────────────────────────────────────────────────────────
+
+export const getSubscription = (getToken: TokenGetter): Promise<Subscription> =>
+  get<Subscription>("/user/subscription", getToken);
+
+export const createCheckoutSession = (
+  getToken: TokenGetter
+): Promise<CheckoutSessionResponse> =>
+  post("/user/subscription/checkout", {}, getToken);
+
+// ─── Notification Settings ────────────────────────────────────────────────────
+
+export const getNotificationSettings = (
+  getToken: TokenGetter
+): Promise<NotificationSettings> =>
+  get<NotificationSettings>("/user/notifications", getToken);
+
+export const updateNotificationSettings = (
+  getToken: TokenGetter,
+  settings: { enabled: boolean; notification_email: string | null }
+): Promise<{ ok: boolean }> =>
+  put("/user/notifications", settings, getToken);
