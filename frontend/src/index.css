@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-900 text-gray-100;
+  }
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  .sidebar-label {
+    @apply block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1;
+  }
+  .select-base {
+    @apply w-full bg-surface-raised border border-surface-border rounded px-2 py-1.5 text-sm text-gray-100
+           focus:outline-none focus:ring-1 focus:ring-brand;
+  }
+  .btn-primary {
+    @apply w-full bg-brand hover:bg-brand-dark text-white font-semibold py-2 rounded
+           transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .card {
+    @apply bg-surface-raised border border-surface-border rounded-lg p-4;
+  }
+  .tab-trigger {
+    @apply px-4 py-2 text-sm font-medium rounded-t border-b-2 transition-colors;
+  }
+  .tab-trigger[data-state="active"] {
+    @apply border-brand text-brand;
+  }
+  .tab-trigger[data-state="inactive"] {
+    @apply border-transparent text-gray-400 hover:text-gray-200;
+  }
+  .stale-banner {
+    @apply bg-yellow-900/50 border border-yellow-600 text-yellow-300 text-sm px-3 py-2 rounded mb-4;
+  }
+}
+
+/* Plotly dark overrides */
+.js-plotly-plot .plotly .main-svg {
+  background: transparent !important;
+}
