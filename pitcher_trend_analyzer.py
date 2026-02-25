@@ -9,7 +9,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-from pybaseball import statcast_pitcher, playerid_lookup, pitching_stats
+from pybaseball import statcast_pitcher, playerid_lookup, pitching_stats, playerid_reverse_lookup
 from datetime import date, timedelta
 import warnings
 warnings.filterwarnings("ignore")
@@ -93,7 +93,7 @@ def get_qualified_pitchers() -> pd.DataFrame:
         .sort_values("Name")
         .reset_index(drop=True)
     )
-    return qualified[["Name", "Team", "IP", "G", "GS", "gs_pct", "_season"]]
+    return qualified[["IDfg","Name", "Team", "IP", "G", "GS", "gs_pct", "_season"]]
 
 
 @st.cache_data(ttl=86400, show_spinner="Looking up pitcher ID…")
@@ -103,7 +103,22 @@ def get_mlbam_id(full_name: str):
         return None
     first = parts[0]
     last  = " ".join(parts[1:])
+    
+    # Our pitcher list has Fangraphs ID, get mlbam ID via playerid_lookup (which is cached)
+    temp_mlbam_id = playerid_reverse_lookup()
     res   = playerid_lookup(last, first)
+    if res.empty:
+        return None
+    rows = res[res["mlb_played_last"].notna()]
+    if rows.empty:
+        rows = res
+    return int(rows.sort_values("mlb_played_last", ascending=False).iloc[0]["key_mlbam"])
+
+@st.cache_data(ttl=86400, show_spinner="Looking up pitcher ID…")
+def get_mlbam_id_from_idfg(pitcher_idfg: int):
+    
+    # Our pitcher list has Fangraphs ID, get mlbam ID via playerid_lookup (which is cached)
+    res = playerid_reverse_lookup([pitcher_idfg], key_type="fangraphs")
     if res.empty:
         return None
     rows = res[res["mlb_played_last"].notna()]
@@ -361,12 +376,15 @@ with st.sidebar:
         st.stop()
 
     pitcher_names = pitchers_df["Name"].tolist()
+    # Had issues with pitcher names, so create a lookup of these names from pitching_stats to the IDfg 
+    pitcher_name_lookup = dict(zip(pitchers_df["Name"], pitchers_df["IDfg"])) #TYPE: int
     pitcher_name = st.selectbox(
         "Search pitcher name",
         options=pitcher_names,
         index=pitcher_names.index("Tarik Skubal") if "Tarik Skubal" in pitcher_names else 0,
         help="Type to search — only pitchers with >100 IP or >70% GS are shown.",
     )
+    pitcher_idfg = pitcher_name_lookup.get(pitcher_name) # Get the IDfg for the selected pitcher name
 
     data_season = st.selectbox(
         "Season to pull game dates from",
@@ -375,7 +393,7 @@ with st.sidebar:
     )
 
     # ── Resolve pitcher ID and fetch season data ───────────────────────────────
-    pid = get_mlbam_id(pitcher_name)
+    pid = get_mlbam_id_from_idfg(pitcher_idfg) # Changed to get mlbam ID from IDfg using the new function. Previous function get_mlbam_id is still available if needed for other use cases.
     if pid is None:
         st.error(f"Could not resolve MLB ID for **{pitcher_name}**.")
         st.stop()
@@ -403,7 +421,7 @@ with st.sidebar:
 
     trend_type = st.radio(
         "Trend type",
-        ["Rolling Window", "Full Season"],
+        ["Full Season","Rolling Window"],
         horizontal=True,
     )
 
@@ -415,7 +433,7 @@ with st.sidebar:
         trend_label = f"Last {n_days} days"
     else:
         # Default to the season before the data season if possible
-        default_trend_season = max(data_season - 1, AVAILABLE_SEASONS[0])
+        default_trend_season = max(data_season, AVAILABLE_SEASONS[0])
         trend_season = st.selectbox(
             "Trend Season",
             options=AVAILABLE_SEASONS,
@@ -429,10 +447,12 @@ with st.sidebar:
 
     # Show pitch types from this pitcher's full season (not just target date)
     all_pitcher_pitches = sorted(season_df["pitch_type"].dropna().unique())
+    fastball_types = ['FF','SI','FC']
+    print(all_pitcher_pitches)
     selected_pitches = st.multiselect(
-        "Pitch types to analyze",
+        "Pitch types to analyze \n(defaults to only fastballs)",
         options=all_pitcher_pitches,
-        default=all_pitcher_pitches,
+        default=[i for i in all_pitcher_pitches if i in fastball_types] or all_pitcher_pitches,
         format_func=pt_label,
     )
 
