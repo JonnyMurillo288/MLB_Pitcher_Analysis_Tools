@@ -129,6 +129,17 @@ def load_season(pid: int, year: int) -> pd.DataFrame:
     return df
 
 
+# ── Cache helpers ─────────────────────────────────────────────────────────────
+
+def get_cached_pitcher_data(idfg: int, year: int) -> tuple[int | None, pd.DataFrame | None]:
+    """Return (mlbam_id, season_df) from cache without making any network calls."""
+    mlbam_id = PITCHER_CACHE.get(f"id_idfg::{idfg}")
+    if mlbam_id is None:
+        return None, None
+    season_df = SEASON_CACHE.get(f"season::{mlbam_id}::{year}")
+    return mlbam_id, season_df
+
+
 # ── Trend dataset builder ─────────────────────────────────────────────────────
 
 def build_trend_df(

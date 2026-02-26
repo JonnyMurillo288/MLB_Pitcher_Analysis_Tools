@@ -47,6 +47,7 @@ export default function Regression({ pitcherId, season }: Props) {
   });
 
   const features = featuresData?.features ?? [];
+  const nGames = featuresData?.n_games ?? null;
 
   const [yCol, setYCol] = useState<string>("");
   const [xCols, setXCols] = useState<string[]>([]);
@@ -197,6 +198,24 @@ export default function Regression({ pitcherId, season }: Props) {
             </div>
           </div>
         )}
+
+        {nGames !== null && xCols.length > 0 && (() => {
+          const maxLag = Math.max(
+            ...xCols.map((col) => {
+              const cfg = lagConfig[col];
+              return cfg && cfg.type !== "none" ? cfg.n : 0;
+            })
+          );
+          const minNeeded = xCols.length + 2;
+          if (maxLag >= nGames) {
+            return (
+              <div className="text-yellow-400 text-xs bg-yellow-900/20 border border-yellow-800/40 rounded px-3 py-2">
+                ⚠ Max lag ({maxLag}) ≥ available games ({nGames}). Reduce the lag or select fewer predictors — need at least {maxLag + minNeeded} games for these settings.
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         {mutation.isError && (
           <div className="text-red-400 text-sm">

@@ -94,8 +94,8 @@ VITE_STRIPE_PUBLISHABLE_KEY
 
 ### Setup Checklist
 
-- [ ] Create Supabase project → run `backend/migrations/001_initial.sql` in SQL Editor
-- [ ] Fill in all keys in `backend/.env` and `frontend/.env`
+- [] [] Create Supabase project → run `backend/migrations/001_initial.sql` in SQL Editor
+- [DONE*] Fill in all keys in `backend/.env` and `frontend/.env`
 - [ ] Create a Stripe Product ($5/year recurring) → paste Price ID in `backend/.env`
-- [ ] Create a SendGrid API key and set a verified sender email
-- [ ] For local Stripe webhook testing: `stripe listen --forward-to localhost:8000/api/webhooks/stripe`
+- [DONE*] Create a SendGrid API key and set a verified sender email
+- [DONE*] For local Stripe webhook testing: `stripe listen --forward-to localhost:8000/api/webhooks/stripe`

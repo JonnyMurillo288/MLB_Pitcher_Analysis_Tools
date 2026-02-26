@@ -98,6 +98,7 @@ export interface FeatureOption {
 
 export interface FeaturesResponse {
   features: FeatureOption[];
+  n_games: number;
 }
 
 export type LagType = "none" | "lag" | "rolling";
@@ -196,6 +197,108 @@ export interface OutcomesRequest {
 export interface RegressionFeaturesRequest {
   pitcher_id: number;
   season: number;
+}
+
+// ─── Trend Signals ────────────────────────────────────────────────────────────
+
+export interface TrendSignals {
+  arrows: Record<string, "up" | "down">;
+  breakout: boolean;
+  divergence: boolean;
+  pitch_mix_shift: boolean;
+  shifted_pitches: string[];
+}
+
+// ─── Game Log ─────────────────────────────────────────────────────────────────
+
+export interface GameLogRow {
+  game_date: string;
+  tbf: number;
+  ip: number | null;
+  k: number;
+  bb: number;
+  hr: number;
+  velo: number | null;
+  whiff_pct: number | null;
+  exit_velo: number | null;
+}
+
+export interface GameLogResponse {
+  games: GameLogRow[];
+}
+
+// ─── Table View (Tab 4) ───────────────────────────────────────────────────────
+
+export interface TableStatMeta {
+  key: string;
+  label: string;
+  unit: string;
+  group: string;
+}
+
+export interface TableViewRow {
+  stat: string;
+  label: string;
+  unit: string;
+  group: string;
+  season_avg: number | null;
+  rolling_avg: number | null;
+  delta: number | null;
+  delta_pct: number | null;
+  higher_is_better: boolean | null;
+}
+
+export interface TableViewResponse {
+  rows: TableViewRow[];
+  rolling_start: string | null;
+  rolling_end: string | null;
+  season_start: string | null;
+  season_end: string | null;
+  n_games_season: number;
+  n_games_rolling: number;
+  available_stats: TableStatMeta[];
+  signals: TrendSignals;
+}
+
+export interface TableViewRequest {
+  pitcher_id: number;
+  season: number;
+  n_days: number;
+}
+
+// ─── League Table (Tab 5) ─────────────────────────────────────────────────────
+
+export interface LeaguePitcherStats {
+  season_avg: number | null;
+  rolling_avg: number | null;
+  delta: number | null;
+  delta_pct: number | null;
+}
+
+export interface LeaguePitcherRow {
+  name: string;
+  pitcher_id: number | null;
+  team: string;
+  ip: number;
+  n_games_season: number;
+  n_games_rolling: number;
+  stats: Record<string, LeaguePitcherStats>;
+  signals: TrendSignals;
+}
+
+export interface LeagueTableResponse {
+  pitchers: LeaguePitcherRow[];
+  n_pitchers_loaded: number;
+  n_pitchers_total: number;
+  rolling_window: number;
+  season: number;
+  available_stats: TableStatMeta[];
+}
+
+export interface LeagueTableRequest {
+  season: number;
+  n_days: number;
+  load_all: boolean;
 }
 
 // ─── User / Auth ──────────────────────────────────────────────────────────────

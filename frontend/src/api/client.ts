@@ -11,6 +11,11 @@ import type {
   FeaturesResponse,
   RunRegressionRequest,
   RegressionResponse,
+  TableViewRequest,
+  TableViewResponse,
+  LeagueTableRequest,
+  LeagueTableResponse,
+  GameLogResponse,
   SavedPitcher,
   Subscription,
   NotificationSettings,
@@ -28,6 +33,7 @@ async function get<T>(path: string, getToken?: TokenGetter): Promise<T> {
     const token = await getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
+  console.log(`GET ${BASE}${path} with headers:`, headers);
   const res = await fetch(`${BASE}${path}`, { headers });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -42,6 +48,7 @@ async function post<T>(path: string, body: unknown, getToken?: TokenGetter): Pro
     const token = await getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
+  console.log(`POST ${path} with headers:`, headers, "and body:", body);
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers,
@@ -60,6 +67,7 @@ async function put<T>(path: string, body: unknown, getToken?: TokenGetter): Prom
     const token = await getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
+  console.log(`PUT ${BASE}${path} with headers:`, headers, "and body:", body);  
   const res = await fetch(`${BASE}${path}`, {
     method: "PUT",
     headers,
@@ -120,6 +128,25 @@ export const getPitchMetrics = (
 export const getOutcomes = (
   req: OutcomesRequest
 ): Promise<OutcomesResponse> => post("/analysis/outcomes", req);
+
+// ─── Game Log ─────────────────────────────────────────────────────────────────
+
+export const getGameLog = (
+  pid: number,
+  year: number
+): Promise<GameLogResponse> => get(`/pitcher/${pid}/season/${year}/gamelog`);
+
+// ─── Table View ──────────────────────────────────────────────────────────────
+
+export const getTableView = (
+  req: TableViewRequest
+): Promise<TableViewResponse> => post("/analysis/table-view", req);
+
+// ─── League Table ─────────────────────────────────────────────────────────────
+
+export const getLeagueTable = (
+  req: LeagueTableRequest
+): Promise<LeagueTableResponse> => post("/analysis/league-table", req);
 
 // ─── Regression ──────────────────────────────────────────────────────────────
 

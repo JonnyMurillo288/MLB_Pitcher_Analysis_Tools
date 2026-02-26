@@ -83,7 +83,7 @@ export default function PitchMetrics({ data, targetDate }: Props) {
     const sp = spinPoints.find(
       (s) => s.game_date === vp.game_date && s.pitch_type === vp.pitch_type
     );
-    if (!sp || vp.value === null || sp.value === null) return;
+    if (!sp || vp.value == null || sp.value == null) return;
     if (!scatterByPitch[vp.pitch_type]) {
       scatterByPitch[vp.pitch_type] = { x: [], y: [], label: vp.pitch_label };
     }
@@ -92,7 +92,7 @@ export default function PitchMetrics({ data, targetDate }: Props) {
   });
 
   // delta bar chart data
-  const deltaRows = comparison.filter((r) => r.delta !== null);
+  const deltaRows = comparison.filter((r) => r.delta != null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -271,7 +271,7 @@ export default function PitchMetrics({ data, targetDate }: Props) {
                   ),
                 },
                 text: deltaRows.map((r) =>
-                  r.delta !== null ? (r.delta > 0 ? `+${r.delta.toFixed(2)}` : r.delta.toFixed(2)) : ""
+                  r.delta != null ? (r.delta > 0 ? `+${r.delta.toFixed(2)}` : r.delta.toFixed(2)) : ""
                 ),
                 textposition: "outside",
               },
@@ -335,21 +335,21 @@ export default function PitchMetrics({ data, targetDate }: Props) {
                   <td className="py-1 pr-3">{r.metric_label}</td>
                   <td className="py-1 pr-3">{r.pitch_label}</td>
                   <td className="py-1 pr-3 text-right font-mono">
-                    {r.today !== null ? r.today.toFixed(2) : "—"}
+                    {r.today != null ? r.today.toFixed(2) : "—"}
                   </td>
                   <td className="py-1 pr-3 text-right font-mono">
-                    {r.trend_avg !== null ? r.trend_avg.toFixed(2) : "—"}
+                    {r.trend_avg != null ? r.trend_avg.toFixed(2) : "—"}
                   </td>
                   <td
                     className={`py-1 text-right font-mono ${
-                      r.delta !== null && r.delta > 0
+                      r.delta != null && r.delta > 0
                         ? "text-green-400"
-                        : r.delta !== null && r.delta < 0
+                        : r.delta != null && r.delta < 0
                         ? "text-red-400"
                         : "text-gray-400"
                     }`}
                   >
-                    {r.delta !== null
+                    {r.delta != null
                       ? (r.delta > 0 ? "+" : "") + r.delta.toFixed(2)
                       : "—"}
                   </td>

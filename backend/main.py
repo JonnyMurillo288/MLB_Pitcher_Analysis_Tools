@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -107,6 +108,18 @@ class RegressionRunRequest(BaseModel):
     y_col:      str
     x_cols:     list[str]
     lag_config: dict[str, LagConfig]
+
+
+class TableViewRequest(BaseModel):
+    pitcher_id: int
+    season:     int
+    n_days:     int = 30
+
+
+class LeagueTableRequest(BaseModel):
+    season:   int
+    n_days:   int = 30
+    load_all: bool = False
 
 
 class SavePitcherRequest(BaseModel):
@@ -255,11 +268,13 @@ async def outcome_analysis(req: OutcomeRequest):
 async def regression_features(req: RegressionFeaturesRequest):
     season_df = await _require_season(req.pitcher_id, req.season)
     _, label_map = await run_in_threadpool(c.build_regression_features, season_df)
+    n_games = int(season_df["game_date"].nunique())
     return {
         "features": [
             {"col": col, "label": label}
             for col, label in label_map.items()
-        ]
+        ],
+        "n_games": n_games,
     }
 
 
@@ -277,6 +292,114 @@ async def regression_run(req: RegressionRunRequest):
         raise HTTPException(status_code=500, detail=f"Regression failed: {e}")
 
     return result
+
+
+@app.get("/api/pitcher/{pid}/season/{year}/gamelog")
+async def get_game_log(pid: int, year: int):
+    df = await _require_season(pid, year)
+    return {"games": await run_in_threadpool(c.game_log, df)}
+
+
+@app.post("/api/analysis/table-view")
+async def table_view_analysis(req: TableViewRequest):
+    season_df = await _require_season(req.pitcher_id, req.season)
+    result = await run_in_threadpool(c.compute_table_view, season_df, req.n_days)
+    return result
+
+
+def _build_pitcher_entry(
+    name: str, mlbam_id: int | None, team: str, ip: float, table: dict, signals: dict
+) -> dict:
+    stats_dict = {
+        r["stat"]: {
+            "season_avg":  r["season_avg"],
+            "rolling_avg": r["rolling_avg"],
+            "delta":       r["delta"],
+            "delta_pct":   r["delta_pct"],
+        }
+        for r in table["rows"]
+    }
+    return {
+        "name":            name,
+        "pitcher_id":      mlbam_id,
+        "team":            team,
+        "ip":              round(ip, 1),
+        "n_games_season":  table["n_games_season"],
+        "n_games_rolling": table["n_games_rolling"],
+        "stats":           stats_dict,
+        "signals":         signals,
+    }
+
+
+async def _load_pitcher_row(
+    sem: asyncio.Semaphore,
+    idfg: int,
+    name: str,
+    team: str,
+    ip: float,
+    season: int,
+    n_days: int,
+) -> dict | None:
+    async with sem:
+        try:
+            mlbam_id = await run_in_threadpool(d.resolve_mlbam_id_from_idfg, idfg)
+            if mlbam_id is None:
+                return None
+            season_df = await run_in_threadpool(d.load_season, mlbam_id, season)
+            if season_df.empty:
+                return None
+            table   = await run_in_threadpool(c.compute_table_view, season_df, n_days)
+            signals = table.pop("signals", {})
+            return _build_pitcher_entry(name, mlbam_id, team, ip, table, signals)
+        except Exception:
+            return None
+
+
+@app.post("/api/analysis/league-table")
+async def league_table_analysis(req: LeagueTableRequest):
+    pitchers_df = await run_in_threadpool(d.load_qualified_pitchers)
+    n_total = len(pitchers_df)
+    available_stats = [
+        {"key": k, "label": v["label"], "unit": v["unit"], "group": v["group"]}
+        for k, v in c.TABLE_STAT_CATALOG.items()
+    ]
+
+    if not req.load_all:
+        # Fast path: only pitchers already in cache (no network calls)
+        results = []
+        for _, row in pitchers_df.iterrows():
+            mlbam_id, season_df = await run_in_threadpool(
+                d.get_cached_pitcher_data, int(row["IDfg"]), req.season
+            )
+            if season_df is None or season_df.empty:
+                continue
+            table   = await run_in_threadpool(c.compute_table_view, season_df, req.n_days)
+            signals = table.pop("signals", {})
+            results.append(_build_pitcher_entry(
+                row["Name"], mlbam_id, row.get("Team", ""), float(row.get("IP", 0)), table, signals
+            ))
+    else:
+        # Concurrent full load — semaphore limits to 5 simultaneous pitcher fetches
+        sem = asyncio.Semaphore(5)
+        tasks = [
+            _load_pitcher_row(
+                sem, int(row["IDfg"]), row["Name"],
+                row.get("Team", ""), float(row.get("IP", 0)),
+                req.season, req.n_days,
+            )
+            for _, row in pitchers_df.iterrows()
+        ]
+        all_results = await asyncio.gather(*tasks)
+        results = [r for r in all_results if r is not None]
+
+    return {
+        "pitchers":           sorted(results, key=lambda r: r["name"]),
+        "n_pitchers_loaded":  len(results),
+        "n_pitchers_total":   n_total,
+        "rolling_window":     req.n_days,
+        "season":             req.season,
+        "available_stats":    available_stats,
+    }
 
 
 # ── Saved Pitchers ────────────────────────────────────────────────────────────

@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
-export default function AuthPage() {
+interface Props {
+  onContinueAsGuest?: () => void;
+}
+
+export default function AuthPage({ onContinueAsGuest }: Props) {
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -147,11 +151,7 @@ export default function AuthPage() {
         <div className="mt-4 text-center">
           <button
             className="text-xs text-gray-500 hover:text-gray-300 underline"
-            onClick={() => {
-              // The parent App will handle this by not requiring auth for the analyzer
-              // This button is only shown as a hint — since we allow anonymous use
-              window.location.hash = "#guest";
-            }}
+            onClick={onContinueAsGuest}
           >
             Continue without an account
           </button>
