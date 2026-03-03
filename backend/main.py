@@ -235,10 +235,12 @@ async def pitch_metrics_analysis(req: PitchMetricsRequest):
             "pitch_types":    int(day_filt["pitch_type"].nunique()),
             "batters_faced":  int(day_df["batter"].nunique()) if "batter" in day_df.columns else 0,
         },
-        "comparison":       c.compute_comparison(day_filt, t_filt, req.metrics, req.pitch_types),
-        "time_series":      c.pitch_time_series(season_df, req.metrics, req.pitch_types),
-        "pitch_usage_today": c.pitch_usage(day_filt),
-        "pitch_usage_trend": c.pitch_usage(t_filt),
+        "comparison":          c.compute_comparison(day_filt, t_filt, req.metrics, req.pitch_types),
+        "time_series":         c.pitch_time_series(season_df, req.metrics, req.pitch_types),
+        "pitch_usage_today":   c.pitch_usage(day_filt),
+        "pitch_usage_trend":   c.pitch_usage(t_filt),
+        "pitch_mix_evolution": c.pitch_mix_time_series(season_df, req.pitch_types),
+        "break_profile":       c.break_profile(season_df, req.pitch_types),
     }
 
 
@@ -261,6 +263,7 @@ async def outcome_analysis(req: OutcomeRequest):
         "pitch_usage_trend": c.pitch_usage(trend_df) if not trend_df.empty else [],
         "outcome_config":   {k: {"label": v["label"], "higher_is_better": v["higher_is_better"], "fmt": v["fmt"]}
                              for k, v in c.OUTCOME_CONFIG.items()},
+        "signals":          c.compute_signals(season_df, req.n_days),
     }
 
 

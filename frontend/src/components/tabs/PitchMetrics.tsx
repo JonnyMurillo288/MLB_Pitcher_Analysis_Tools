@@ -5,6 +5,8 @@ import type { PitchMetricsResponse, ComparisonRow } from "../../types";
 interface Props {
   data: PitchMetricsResponse;
   targetDate: string;
+  dashWidgets?: string[];
+  onToggleWidget?: (id: string) => void;
 }
 
 const DARK_LAYOUT: Partial<Plotly.Layout> = {
@@ -28,6 +30,17 @@ function groupBy<T>(arr: T[], key: (t: T) => string): Record<string, T[]> {
     },
     {} as Record<string, T[]>
   );
+}
+
+function getColorMap(data: PitchMetricsResponse): Record<string, string> {
+  const allPitchTypes = Array.from(
+    new Set(Object.values(data.time_series).flatMap((pts) => pts.map((p) => p.pitch_type)))
+  );
+  const colorMap: Record<string, string> = {};
+  allPitchTypes.forEach((pt, i) => {
+    colorMap[pt] = PIE_COLORS[i % PIE_COLORS.length];
+  });
+  return colorMap;
 }
 
 function PieChart({ title, rows }: { title: string; rows: { label: string; count: number }[] }) {
@@ -57,26 +70,160 @@ function PieChart({ title, rows }: { title: string; rows: { label: string; count
   );
 }
 
-export default function PitchMetrics({ data, targetDate }: Props) {
-  const { comparison, time_series, pitch_usage_today, pitch_usage_trend, kpi } = data;
-
-  // group comparison by metric
-  const byMetric = groupBy(comparison, (r) => r.metric);
-
-  // group time_series entries by pitch_type for colours
-  const allPitchTypes = Array.from(
-    new Set(Object.values(time_series).flatMap((pts) => pts.map((p) => p.pitch_type)))
+function PinBtn({
+  id,
+  dashWidgets,
+  onToggle,
+}: {
+  id: string;
+  dashWidgets: string[];
+  onToggle: (id: string) => void;
+}) {
+  const pinned = dashWidgets.includes(id);
+  return (
+    <button
+      onClick={() => onToggle(id)}
+      className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+        pinned
+          ? "bg-brand/20 text-brand border-brand/30"
+          : "text-gray-600 border-gray-700 hover:text-gray-300 hover:border-gray-500"
+      }`}
+      title={pinned ? "Remove from Custom tab" : "Pin to Custom tab"}
+    >
+      📌
+    </button>
   );
-  const colorMap: Record<string, string> = {};
-  allPitchTypes.forEach((pt, i) => {
-    colorMap[pt] = PIE_COLORS[i % PIE_COLORS.length];
+}
+
+// ── Exported chart component — used by CustomDashboard ────────────────────────
+
+export function PitchTSCard({
+  metric,
+  data,
+  targetDate,
+}: {
+  metric: string;
+  data: PitchMetricsResponse;
+  targetDate: string;
+}) {
+  const { time_series, comparison } = data;
+  const points = time_series[metric] ?? [];
+
+  if (points.length === 0) {
+    return (
+      <div className="text-gray-500 text-sm text-center py-8">No data for this metric.</div>
+    );
+  }
+
+  const colorMap = getColorMap(data);
+  const metricLabel = comparison.find((r) => r.metric === metric)?.metric_label ?? metric;
+  const unit = comparison.find((r) => r.metric === metric)?.unit ?? "";
+
+  const byPT = groupBy(points, (p) => p.pitch_type);
+
+  const traces: Plotly.Data[] = Object.entries(byPT).map(([pt, pts]) => ({
+    type: "scatter",
+    mode: "lines+markers",
+    name: pts[0]?.pitch_label ?? pt,
+    x: pts.map((p) => p.game_date),
+    y: pts.map((p) => p.value),
+    line: { color: colorMap[pt] ?? "#6b7280", width: 2 },
+    marker: { size: 5 },
+    connectgaps: false,
+  }));
+
+  const trendAvgTraces: Plotly.Data[] = Object.entries(byPT).map(([pt, pts]) => {
+    const validVals = pts.map((p) => p.value).filter((v): v is number => v !== null);
+    const avg = validVals.length ? validVals.reduce((a, b) => a + b, 0) / validVals.length : null;
+    return {
+      type: "scatter",
+      mode: "lines",
+      name: `${pts[0]?.pitch_label ?? pt} avg`,
+      x: pts.map((p) => p.game_date),
+      y: pts.map(() => avg),
+      line: { color: colorMap[pt] ?? "#6b7280", width: 1, dash: "dot" },
+      showlegend: false,
+      hoverinfo: "skip",
+    };
   });
+
+  const allDates = points.map((p) => p.game_date).sort();
+  const tdIdx = allDates.indexOf(targetDate);
+  const beforeDates = tdIdx >= 0 ? allDates.slice(0, tdIdx) : allDates;
+  const rectEnd = beforeDates.length ? beforeDates[beforeDates.length - 1] : targetDate;
+
+  const shapes: Partial<Plotly.Shape>[] = [
+    {
+      type: "line",
+      x0: targetDate,
+      x1: targetDate,
+      y0: 0,
+      y1: 1,
+      xref: "x",
+      yref: "paper",
+      line: { color: "red", width: 2, dash: "dash" },
+    },
+  ];
+  if (rectEnd !== targetDate) {
+    shapes.push({
+      type: "rect",
+      x0: rectEnd,
+      x1: targetDate,
+      y0: 0,
+      y1: 1,
+      xref: "x",
+      yref: "paper",
+      fillcolor: "rgba(234,179,8,0.08)",
+      line: { width: 0 },
+    });
+  }
+
+  const annotations: Partial<Plotly.Annotations>[] = [
+    {
+      x: targetDate,
+      y: 1,
+      xref: "x",
+      yref: "paper",
+      text: "Target",
+      showarrow: false,
+      xanchor: "left",
+      yanchor: "top",
+      font: { color: "red", size: 10 },
+    },
+  ];
+
+  return (
+    <Plot
+      data={[...traces, ...trendAvgTraces]}
+      layout={{
+        ...DARK_LAYOUT,
+        title: { text: `${metricLabel}${unit ? ` (${unit})` : ""}`, font: { size: 13 } },
+        xaxis: { type: "category", tickangle: -30 },
+        yaxis: { title: { text: unit } },
+        shapes,
+        annotations,
+        legend: { orientation: "h", y: -0.2 },
+        height: 320,
+      }}
+      config={{ displayModeBar: false, responsive: true }}
+      style={{ width: "100%" }}
+    />
+  );
+}
+
+// ── Main tab component ─────────────────────────────────────────────────────────
+
+export default function PitchMetrics({ data, targetDate, dashWidgets = [], onToggleWidget }: Props) {
+  const { comparison, time_series, pitch_usage_today, pitch_usage_trend, kpi, pitch_mix_evolution = [], break_profile = [] } = data;
+
+  const byMetric = groupBy(comparison, (r) => r.metric);
 
   // velocity vs spin scatter
   const velCol = "release_speed";
   const spinCol = "release_spin_rate";
   const velPoints = time_series[velCol] ?? [];
   const spinPoints = time_series[spinCol] ?? [];
+  const colorMap = getColorMap(data);
 
   const scatterByPitch: Record<string, { x: number[]; y: number[]; label: string }> = {};
   velPoints.forEach((vp) => {
@@ -91,7 +238,6 @@ export default function PitchMetrics({ data, targetDate }: Props) {
     scatterByPitch[vp.pitch_type].y.push(sp.value);
   });
 
-  // delta bar chart data
   const deltaRows = comparison.filter((r) => r.delta != null);
 
   return (
@@ -132,6 +278,45 @@ export default function PitchMetrics({ data, targetDate }: Props) {
         </div>
       </div>
 
+      {/* Pitch mix evolution — stacked area */}
+      {pitch_mix_evolution.length > 0 && (() => {
+        const evoByPT = groupBy(pitch_mix_evolution, (p) => p.pitch_type);
+        const dates = Array.from(new Set(pitch_mix_evolution.map((p) => p.game_date))).sort();
+        const evoTraces: Plotly.Data[] = Object.entries(evoByPT).map(([pt, pts]) => {
+          const pctByDate: Record<string, number> = {};
+          pts.forEach((p) => { pctByDate[p.game_date] = p.pct; });
+          return {
+            type: "scatter",
+            mode: "none",
+            name: pts[0]?.pitch_label ?? pt,
+            x: dates,
+            y: dates.map((d) => pctByDate[d] ?? 0),
+            stackgroup: "one",
+            fillcolor: (colorMap[pt] ?? "#6b7280") + "bb",
+            line: { color: colorMap[pt] ?? "#6b7280" },
+            hovertemplate: `%{fullData.name}: %{y:.1f}%<extra></extra>`,
+          };
+        });
+        return (
+          <div className="card">
+            <Plot
+              data={evoTraces}
+              layout={{
+                ...DARK_LAYOUT,
+                title: { text: "Pitch Mix Evolution", font: { size: 13 } },
+                xaxis: { type: "category", tickangle: -30, nticks: 8 },
+                yaxis: { title: { text: "%" }, range: [0, 100] },
+                legend: { orientation: "h", y: -0.22 },
+                height: 320,
+                margin: { t: 40, b: 60, l: 50, r: 15 },
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: "100%" }}
+            />
+          </div>
+        );
+      })()}
+
       {/* Metric comparison cards grouped by metric */}
       {Object.entries(byMetric).map(([metric, rows]) => {
         const metricLabel = rows[0]?.metric_label ?? metric;
@@ -154,104 +339,18 @@ export default function PitchMetrics({ data, targetDate }: Props) {
         );
       })}
 
-      {/* Time-series per metric */}
+      {/* Time-series per metric — individually pinnable */}
       {Object.entries(time_series).map(([metric, points]) => {
         if (points.length === 0) return null;
-        const metricLabel = comparison.find((r) => r.metric === metric)?.metric_label ?? metric;
-        const unit = comparison.find((r) => r.metric === metric)?.unit ?? "";
-
-        const byPT = groupBy(points, (p) => p.pitch_type);
-
-        const traces: Plotly.Data[] = Object.entries(byPT).map(([pt, pts]) => ({
-          type: "scatter",
-          mode: "lines+markers",
-          name: pts[0]?.pitch_label ?? pt,
-          x: pts.map((p) => p.game_date),
-          y: pts.map((p) => p.value),
-          line: { color: colorMap[pt] ?? "#6b7280", width: 2 },
-          marker: { size: 5 },
-          connectgaps: false,
-        }));
-
-        // trend avg dotted lines per pitch type
-        const trendAvgTraces: Plotly.Data[] = Object.entries(byPT).map(([pt, pts]) => {
-          const validVals = pts.map((p) => p.value).filter((v): v is number => v !== null);
-          const avg = validVals.length ? validVals.reduce((a, b) => a + b, 0) / validVals.length : null;
-          return {
-            type: "scatter",
-            mode: "lines",
-            name: `${pts[0]?.pitch_label ?? pt} avg`,
-            x: pts.map((p) => p.game_date),
-            y: pts.map(() => avg),
-            line: { color: colorMap[pt] ?? "#6b7280", width: 1, dash: "dot" },
-            showlegend: false,
-            hoverinfo: "skip",
-          };
-        });
-
-        // vertical line + rect shapes for target date
-        const allDates = points.map((p) => p.game_date).sort();
-        const tdIdx = allDates.indexOf(targetDate);
-        const beforeDates = tdIdx >= 0 ? allDates.slice(0, tdIdx) : allDates;
-        const rectEnd = beforeDates.length ? beforeDates[beforeDates.length - 1] : targetDate;
-
-        const shapes: Partial<Plotly.Shape>[] = [
-          {
-            type: "line",
-            x0: targetDate,
-            x1: targetDate,
-            y0: 0,
-            y1: 1,
-            xref: "x",
-            yref: "paper",
-            line: { color: "red", width: 2, dash: "dash" },
-          },
-        ];
-        if (rectEnd !== targetDate) {
-          shapes.push({
-            type: "rect",
-            x0: rectEnd,
-            x1: targetDate,
-            y0: 0,
-            y1: 1,
-            xref: "x",
-            yref: "paper",
-            fillcolor: "rgba(234,179,8,0.08)",
-            line: { width: 0 },
-          });
-        }
-
-        const annotations: Partial<Plotly.Annotations>[] = [
-          {
-            x: targetDate,
-            y: 1,
-            xref: "x",
-            yref: "paper",
-            text: "Target",
-            showarrow: false,
-            xanchor: "left",
-            yanchor: "top",
-            font: { color: "red", size: 10 },
-          },
-        ];
-
+        const widgetId = `pm:ts:${metric}`;
         return (
           <div key={metric} className="card">
-            <Plot
-              data={[...traces, ...trendAvgTraces]}
-              layout={{
-                ...DARK_LAYOUT,
-                title: { text: `${metricLabel}${unit ? ` (${unit})` : ""}`, font: { size: 13 } },
-                xaxis: { type: "category", tickangle: -30 },
-                yaxis: { title: { text: unit } },
-                shapes,
-                annotations,
-                legend: { orientation: "h", y: -0.2 },
-                height: 320,
-              }}
-              config={{ displayModeBar: false, responsive: true }}
-              style={{ width: "100%" }}
-            />
+            {onToggleWidget && (
+              <div className="flex justify-end mb-1">
+                <PinBtn id={widgetId} dashWidgets={dashWidgets} onToggle={onToggleWidget} />
+              </div>
+            )}
+            <PitchTSCard metric={metric} data={data} targetDate={targetDate} />
           </div>
         );
       })}
@@ -308,6 +407,53 @@ export default function PitchMetrics({ data, targetDate }: Props) {
               yaxis: { title: { text: "Spin Rate (rpm)" } },
               legend: { orientation: "h", y: -0.2 },
               height: 350,
+            }}
+            config={{ displayModeBar: false, responsive: true }}
+            style={{ width: "100%" }}
+          />
+        </div>
+      )}
+
+      {/* Movement profile scatter */}
+      {break_profile.length > 0 && (
+        <div className="card">
+          <Plot
+            data={break_profile.map((bp) => ({
+              type: "scatter",
+              mode: "text+markers",
+              name: bp.pitch_label,
+              x: [+(bp.pfx_x * 12).toFixed(1)],
+              y: [+(bp.pfx_z * 12).toFixed(1)],
+              text: [bp.pitch_label],
+              textposition: "top center" as const,
+              textfont: { size: 10, color: colorMap[bp.pitch_type] ?? "#9ca3af" },
+              marker: {
+                size: Math.max(14, Math.min(36, bp.n / 15)),
+                color: colorMap[bp.pitch_type] ?? "#6b7280",
+                opacity: 0.85,
+                line: { width: 1.5, color: "#111827" },
+              },
+              hovertemplate:
+                `<b>${bp.pitch_label}</b><br>` +
+                `H-Break: %{x:.1f}"<br>` +
+                `V-Break: %{y:.1f}"` +
+                (bp.release_speed != null ? `<br>Velo: ${bp.release_speed.toFixed(1)} mph` : "") +
+                `<br>n=${bp.n}<extra></extra>`,
+            }))}
+            layout={{
+              ...DARK_LAYOUT,
+              title: { text: "Movement Profile (Season Avg, inches)", font: { size: 13 } },
+              xaxis: {
+                title: { text: "Horizontal Break (in) — arm-side +" },
+                zeroline: true, zerolinecolor: "#4b5563", zerolinewidth: 1,
+              },
+              yaxis: {
+                title: { text: "Induced Vertical Break (in)" },
+                zeroline: true, zerolinecolor: "#4b5563", zerolinewidth: 1,
+              },
+              showlegend: false,
+              height: 380,
+              margin: { t: 40, b: 55, l: 65, r: 20 },
             }}
             config={{ displayModeBar: false, responsive: true }}
             style={{ width: "100%" }}

@@ -39,24 +39,15 @@ import type {
 import { useAuth } from "./contexts/AuthContext";
 import AuthPage from "./pages/AuthPage";
 
-const ALL_WIDGET_IDS = [
-  "pitch-metrics",
-  "outcome-stats",
-  "table-view",
-  "game-log",
-  "regression",
-  "league-table",
-] as const;
-type WidgetId = typeof ALL_WIDGET_IDS[number];
-
+// ── Tab-level pin button (for tabs without per-chart pins) ────────────────────
 function PinButton({
   id,
   dashWidgets,
   onToggle,
 }: {
-  id: WidgetId;
-  dashWidgets: WidgetId[];
-  onToggle: (id: WidgetId) => void;
+  id: string;
+  dashWidgets: string[];
+  onToggle: (id: string) => void;
 }) {
   const pinned = dashWidgets.includes(id);
   return (
@@ -92,13 +83,15 @@ export default function App() {
   }, []);
 
   // ── Subscription & Pro status ──────────────────────────────────────────────
+  const isTestMode = import.meta.env.VITE_TEST_MODE === "true";
+
   const { data: sub } = useQuery({
     queryKey: ["subscription"],
     queryFn: () => getSubscription(getToken),
-    enabled: !!user,
+    enabled: !!user && !isTestMode,
     staleTime: 60_000,
   });
-  const isPro = sub?.status === "active";
+  const isPro = isTestMode || sub?.status === "active";
 
   // ── Checkout mutation (toolbar upgrade button) ────────────────────────────
   const checkoutMutation = useMutation({
@@ -144,23 +137,35 @@ export default function App() {
   });
 
   // ── Custom dashboard widget state ──────────────────────────────────────────
-  const [dashWidgets, setDashWidgets] = useState<WidgetId[]>(() => {
+  const [dashWidgets, setDashWidgets] = useState<string[]>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("pitcher_dashboard_widgets") ?? "[]");
-      return (saved as string[]).filter(
-        (w): w is WidgetId => (ALL_WIDGET_IDS as readonly string[]).includes(w)
-      );
+      const raw = JSON.parse(localStorage.getItem("pitcher_dashboard_widgets") ?? "[]") as string[];
+      // Migrate stale widget IDs from before the bb_9/k_9 → bb_per_9/k_per_9 rename
+      const ID_RENAMES: Record<string, string> = {
+        "os:ts:bb_9": "os:ts:bb_per_9",
+        "os:ts:k_9":  "os:ts:k_per_9",
+      };
+      const migrated = raw.map((id) => ID_RENAMES[id] ?? id);
+      if (migrated.some((id, i) => id !== raw[i])) {
+        localStorage.setItem("pitcher_dashboard_widgets", JSON.stringify(migrated));
+      }
+      return migrated;
     } catch {
       return [];
     }
   });
 
-  function toggleDashWidget(id: WidgetId) {
+  function toggleDashWidget(id: string) {
     setDashWidgets((prev) => {
       const next = prev.includes(id) ? prev.filter((w) => w !== id) : [...prev, id];
       localStorage.setItem("pitcher_dashboard_widgets", JSON.stringify(next));
       return next;
     });
+  }
+
+  function reorderDashWidgets(newOrder: string[]) {
+    setDashWidgets(newOrder);
+    localStorage.setItem("pitcher_dashboard_widgets", JSON.stringify(newOrder));
   }
 
   // ── Sidebar state ──────────────────────────────────────────────────────────
@@ -559,19 +564,12 @@ export default function App() {
                 </div>
               )}
               {committed && pitchMetricsData && (
-                <div className="flex flex-col gap-4">
-                  <div className="flex justify-end">
-                    <PinButton
-                      id="pitch-metrics"
-                      dashWidgets={dashWidgets}
-                      onToggle={toggleDashWidget}
-                    />
-                  </div>
-                  <PitchMetrics
-                    data={pitchMetricsData}
-                    targetDate={committed.targetDate}
-                  />
-                </div>
+                <PitchMetrics
+                  data={pitchMetricsData}
+                  targetDate={committed.targetDate}
+                  dashWidgets={dashWidgets}
+                  onToggleWidget={toggleDashWidget}
+                />
               )}
             </Tabs.Content>
 
@@ -593,19 +591,12 @@ export default function App() {
                 </div>
               )}
               {committed && outcomesData && (
-                <div className="flex flex-col gap-4">
-                  <div className="flex justify-end">
-                    <PinButton
-                      id="outcome-stats"
-                      dashWidgets={dashWidgets}
-                      onToggle={toggleDashWidget}
-                    />
-                  </div>
-                  <OutcomeStats
-                    data={outcomesData}
-                    targetDate={committed.targetDate}
-                  />
-                </div>
+                <OutcomeStats
+                  data={outcomesData}
+                  targetDate={committed.targetDate}
+                  dashWidgets={dashWidgets}
+                  onToggleWidget={toggleDashWidget}
+                />
               )}
             </Tabs.Content>
 
@@ -683,7 +674,8 @@ export default function App() {
             <Tabs.Content value="custom">
               <CustomDashboard
                 widgets={dashWidgets}
-                onRemoveWidget={(id) => toggleDashWidget(id as WidgetId)}
+                onRemoveWidget={(id) => toggleDashWidget(id)}
+                onReorderWidgets={reorderDashWidgets}
                 pitcherId={pitcherId ?? 0}
                 season={dataSeason}
                 committed={committed}

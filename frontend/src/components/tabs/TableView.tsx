@@ -194,6 +194,30 @@ export default function TableView({ pitcherId, season }: Props) {
     }
   }
 
+  function downloadCSV() {
+    if (!data) return;
+    const headers = ["Stat", "Group", "Unit", "Season Avg", `Last ${nDays}d Avg`, "Delta", "Delta%"];
+    const rows = visibleRows.map((r) => [
+      r.label,
+      r.group,
+      r.unit,
+      r.season_avg != null ? r.season_avg.toFixed(3) : "",
+      r.rolling_avg != null ? r.rolling_avg.toFixed(3) : "",
+      r.delta != null ? r.delta.toFixed(3) : "",
+      r.delta_pct != null ? r.delta_pct.toFixed(1) : "",
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pitcher_stats_${localSeason}_${nDays}d.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* ── Controls ─────────────────────────────────────────────────────── */}
@@ -246,6 +270,16 @@ export default function TableView({ pitcherId, season }: Props) {
           <span className="text-xs text-gray-400 animate-pulse self-end pb-1">
             Loading…
           </span>
+        )}
+
+        {data && (
+          <button
+            onClick={downloadCSV}
+            className="self-end text-xs px-3 py-1 rounded border border-gray-600 text-gray-300 hover:border-gray-400 hover:text-gray-100 transition-colors"
+            title="Export visible stats to CSV"
+          >
+            ↓ CSV
+          </button>
         )}
       </div>
 

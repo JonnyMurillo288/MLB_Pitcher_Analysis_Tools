@@ -395,6 +395,62 @@ def compute_signals(season_df: pd.DataFrame, n_days: int) -> dict:
     }
 
 
+# ── Pitch mix evolution + break profile ──────────────────────────────────────
+
+def pitch_mix_time_series(
+    season_df: pd.DataFrame,
+    pitch_types: list[str],
+) -> list[dict]:
+    """Per-game pitch type usage percentages for the mix evolution chart."""
+    if season_df.empty:
+        return []
+    df = season_df[season_df["pitch_type"].isin(pitch_types)]
+    if df.empty:
+        return []
+    groups = (
+        df.groupby(["game_date", "pitch_type"])
+        .size()
+        .reset_index(name="n")
+    )
+    totals = groups.groupby("game_date")["n"].transform("sum")
+    groups["pct"] = (groups["n"] / totals * 100).round(1)
+    groups["game_date"] = groups["game_date"].astype(str)
+    groups["pitch_label"] = groups["pitch_type"].map(_pt_label)
+    return (
+        groups[["game_date", "pitch_type", "pitch_label", "pct", "n"]]
+        .sort_values("game_date")
+        .to_dict("records")
+    )
+
+
+def break_profile(
+    season_df: pd.DataFrame,
+    pitch_types: list[str],
+) -> list[dict]:
+    """Season-average horizontal + vertical break per pitch type for the movement scatter."""
+    if season_df.empty:
+        return []
+    result = []
+    for pt in pitch_types:
+        sub = season_df[season_df["pitch_type"] == pt]
+        if sub.empty:
+            continue
+        pfx_x = sub["pfx_x"].dropna().mean() if "pfx_x" in sub.columns else None
+        pfx_z = sub["pfx_z"].dropna().mean() if "pfx_z" in sub.columns else None
+        if pfx_x is None or pd.isna(pfx_x) or pfx_z is None or pd.isna(pfx_z):
+            continue
+        velo = sub["release_speed"].dropna().mean() if "release_speed" in sub.columns else None
+        result.append({
+            "pitch_type":    pt,
+            "pitch_label":   _pt_label(pt),
+            "pfx_x":         _safe(pfx_x),
+            "pfx_z":         _safe(pfx_z),
+            "release_speed": _safe(velo),
+            "n":             int(sub.shape[0]),
+        })
+    return result
+
+
 # ── Game log ──────────────────────────────────────────────────────────────────
 
 def game_log(season_df: pd.DataFrame) -> list[dict]:

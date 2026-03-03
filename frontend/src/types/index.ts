@@ -56,12 +56,31 @@ export interface PitchMetricsKPI {
   batters_faced: number;
 }
 
+export interface PitchMixPoint {
+  game_date: string;
+  pitch_type: string;
+  pitch_label: string;
+  pct: number;
+  n: number;
+}
+
+export interface BreakProfilePoint {
+  pitch_type: string;
+  pitch_label: string;
+  pfx_x: number;
+  pfx_z: number;
+  release_speed: number | null;
+  n: number;
+}
+
 export interface PitchMetricsResponse {
   comparison: ComparisonRow[];
   time_series: Record<string, TimeSeriesPoint[]>;
   pitch_usage_today: PitchUsageRow[];
   pitch_usage_trend: PitchUsageRow[];
   kpi: PitchMetricsKPI;
+  pitch_mix_evolution: PitchMixPoint[];
+  break_profile: BreakProfilePoint[];
 }
 
 // ─── Outcome Stats (Tab 2) ────────────────────────────────────────────────────
@@ -70,11 +89,19 @@ export interface OutcomeAgg {
   exit_velo: number | null;
   gb_pct: number | null;
   fb_pct: number | null;
-  bb_9: number | null;
-  k_9: number | null;
+  bb_per_9: number | null;
+  k_per_9: number | null;
   whiff_pct: number | null;
   swstr_pct: number | null;
   chase_pct: number | null;
+  hhr_pct: number | null;
+  barrel_pct: number | null;
+  fps_pct: number | null;
+  zone_pct: number | null;
+  iz_whiff_pct: number | null;
+  oz_whiff_pct: number | null;
+  two_strike_whiff_pct: number | null;
+  rp_consistency: number | null;
 }
 
 export interface OutcomeGameRow extends OutcomeAgg {
@@ -87,6 +114,7 @@ export interface OutcomesResponse {
   per_game_outcomes: OutcomeGameRow[];
   pitch_usage_today: PitchUsageRow[];
   pitch_usage_trend: PitchUsageRow[];
+  signals?: TrendSignals;
 }
 
 // ─── Regression (Tab 3) ──────────────────────────────────────────────────────
