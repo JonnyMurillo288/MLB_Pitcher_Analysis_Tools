@@ -21,3 +21,9 @@ docker-compose*.yaml
 .env.development
 .env.production
 .env.test
+
+# Data files
+*.csv
+*.json
+*.xml
+*.parquet
